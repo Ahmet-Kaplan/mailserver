@@ -6,16 +6,19 @@ export RECIPIENT_DELIMITER
 export FETCHMAIL_INTERVAL
 export RELAY_NETWORKS
 export PASSWORD_SCHEME
+export DKIM_SELECTOR
 
 TESTING=${TESTING:-false}
 DEBUG_MODE=${DEBUG_MODE:-false}
 
 ADD_DOMAINS=${ADD_DOMAINS:-}
 
-DBPASS=$([ -f "$DBPASS" ] && cat "$DBPASS" || echo "${DBPASS:-}")
+export DBPASS=$([ -f "$DBPASS" ] && cat "$DBPASS" || echo "${DBPASS:-}")
 RSPAMD_PASSWORD=$([ -f "$RSPAMD_PASSWORD" ] && cat "$RSPAMD_PASSWORD" || echo "${RSPAMD_PASSWORD:-}")
 WHITELIST_SPAM_ADDRESSES=${WHITELIST_SPAM_ADDRESSES:-}
 OPENDKIM_KEY_LENGTH=${OPENDKIM_KEY_LENGTH:-1024}
+DKIM_KEY_LENGTH=${DKIM_KEY_LENGTH:-$OPENDKIM_KEY_LENGTH}
+DKIM_SELECTOR=${DKIM_SELECTOR:-mail}
 
 DISABLE_RSPAMD_MODULE=${DISABLE_RSPAMD_MODULE:-}
 DISABLE_SIEVE=${DISABLE_SIEVE:-false}
@@ -31,6 +34,8 @@ RECIPIENT_DELIMITER=${RECIPIENT_DELIMITER:-"+"}
 FETCHMAIL_INTERVAL=${FETCHMAIL_INTERVAL:-10}
 RELAY_NETWORKS=${RELAY_NETWORKS:-}
 PASSWORD_SCHEME=${PASSWORD_SCHEME:-"SHA512-CRYPT"}
+
+DISABLE_VHOSTS_OWNERSHIP_SET=${DISABLE_VHOSTS_OWNERSHIP_SET:-false}
 
 # SSL CERTIFICATES
 # ---------------------------------------------------------------------------------------------
@@ -58,23 +63,27 @@ for domain in "${domains[@]}"; do
   mkdir -p /var/mail/dkim/"$domain"
 
   if [ -f /var/mail/opendkim/"$domain"/mail.private ]; then
-    echo "[INFO] Found an old DKIM keys, migrating files to the new location"
-    mv /var/mail/opendkim/"$domain"/mail.private /var/mail/dkim/"$domain"/private.key
-    mv /var/mail/opendkim/"$domain"/mail.txt /var/mail/dkim/"$domain"/public.key
+    echo "[INFO] Found an old OPENDKIM keys, migrating files to the new location"
+    mv /var/mail/opendkim/"$domain"/mail.private /var/mail/dkim/"$domain"/mail.private.key
+    mv /var/mail/opendkim/"$domain"/mail.txt /var/mail/dkim/"$domain"/mail.public.key
     rm -rf /var/mail/opendkim/"$domain"
     rmdir --ignore-fail-on-non-empty /var/mail/opendkim
-  elif [ ! -f /var/mail/dkim/"$domain"/private.key ]; then
+  elif [ -f /var/mail/dkim/"$domain"/private.key ]; then
+    echo "[INFO] Found an old DKIM keys, migrating files to the new location"
+    mv /var/mail/dkim/"$domain"/private.key /var/mail/dkim/"$domain"/mail.private.key
+    mv /var/mail/dkim/"$domain"/public.key /var/mail/dkim/"$domain"/mail.public.key
+  fi
+  if [ ! -f /var/mail/dkim/"$domain"/"$DKIM_SELECTOR".private.key ]; then
     echo "[INFO] Creating DKIM keys for domain $domain"
     rspamadm dkim_keygen \
-      --selector=mail \
+      --selector="$DKIM_SELECTOR" \
       --domain="$domain" \
-      --bits="$OPENDKIM_KEY_LENGTH" \
-      --privkey=/var/mail/dkim/"$domain"/private.key \
-      > /var/mail/dkim/"$domain"/public.key
+      --bits="$DKIM_KEY_LENGTH" \
+      --privkey=/var/mail/dkim/"$domain"/"$DKIM_SELECTOR".private.key \
+      > /var/mail/dkim/"$domain"/"$DKIM_SELECTOR".public.key
   else
     echo "[INFO] Found DKIM key pair for domain $domain - skip creation"
   fi
-
 done
 
 # LDAP SUPPORT
@@ -116,6 +125,8 @@ if [ "$DBDRIVER" = "ldap" ]; then
   export LDAP_GROUP_FILTER
   export LDAP_GROUP_ATTRIBUTE
   export LDAP_GROUP_FORMAT
+  export LDAP_GROUP_RESULT_ATTRIBUTE
+  export LDAP_GROUP_RESULT_MEMBER
 
   export LDAP_SENDER_SEARCH_BASE
   export LDAP_SENDER_SEARCH_SCOPE
@@ -172,6 +183,8 @@ if [ "$DBDRIVER" = "ldap" ]; then
   LDAP_GROUP_FILTER=${LDAP_GROUP_FILTER:-}
   LDAP_GROUP_ATTRIBUTE=${LDAP_GROUP_ATTRIBUTE:-}
   LDAP_GROUP_FORMAT=${LDAP_GROUP_FORMAT:-}
+  LDAP_GROUP_RESULT_ATTRIBUTE=${LDAP_GROUP_RESULT_ATTRIBUTE:-}
+  LDAP_GROUP_RESULT_MEMBER=${LDAP_GROUP_RESULT_MEMBER:-}
 
   LDAP_SENDER_SEARCH_BASE=${LDAP_SENDER_SEARCH_BASE:-"${LDAP_DEFAULT_SEARCH_BASE}"}
   LDAP_SENDER_SEARCH_SCOPE=${LDAP_SENDER_SEARCH_SCOPE:-"${LDAP_DEFAULT_SEARCH_SCOPE}"}
@@ -236,6 +249,8 @@ _envtpl /etc/dovecot/conf.d/90-quota.conf
 _envtpl /etc/rspamd/local.d/redis.conf
 _envtpl /etc/rspamd/local.d/settings.conf
 _envtpl /etc/rspamd/local.d/statistic.conf
+_envtpl /etc/rspamd/local.d/dkim_signing.conf
+_envtpl /etc/rspamd/local.d/arc.conf
 
 _envtpl /etc/cron.d/fetchmail
 _envtpl /etc/mailname
@@ -587,7 +602,12 @@ chown -R vmail:vmail /var/mail/sieve
 chmod +x /etc/dovecot/sieve/*.sh
 
 # Check permissions of vhosts directories
-find /var/mail/vhosts ! -user vmail -print0 | xargs -0 -r chown vmail:vmail
+if [ "$DISABLE_VHOSTS_OWNERSHIP_SET" = false ]; then
+  find /var/mail/vhosts ! -user vmail -print0 | xargs -0 -r chown vmail:vmail
+else
+  echo "[INFO] VHOSTS directories permission set is disabled"
+  echo "[WARNING] If you manually created a directory under the vhost folder, you will not receive any emails on that email address!"
+fi
 
 # Avoid file_dotlock_open function exception
 rm -f /var/mail/dovecot/instances
@@ -649,8 +669,12 @@ sed -i "s|<PASSWORD>|${PASSWORD}|g" /etc/rspamd/local.d/worker-controller.inc
 
 # Set permissions
 mkdir -p /var/mail/rspamd /var/log/rspamd /run/rspamd
-chown -R _rspamd:_rspamd /var/mail/rspamd /var/log/rspamd /run/rspamd
+chown -R _rspamd:_rspamd /var/mail/rspamd /var/log/rspamd /run/rspamd /var/mail/dkim
 chmod 750 /var/mail/rspamd /var/log/rspamd
+
+# Fix old DKIM keys permissions
+chmod 444 /var/mail/dkim/*/*.public.key
+chmod 440 /var/mail/dkim/*/*.private.key
 
 modules+=(${DISABLE_RSPAMD_MODULE//,/ })
 
@@ -749,8 +773,9 @@ fi
 # ---------------------------------------------------------------------------------------------
 
 # Remove invoke-rc.d warning
-sed -i 's|rsyslog-rotate|rsyslog-rotate \&>/dev/null|g' /etc/logrotate.d/rsyslog
-
+sed -i 's|invoke-rc.d rsyslog rotate|s6-svc -h /services/rsyslogd|g' /usr/lib/rsyslog/rsyslog-rotate
+sed -i 's|invoke-rc.d clamav-daemon reload-log|s6-svc -h /services/clamd|g' /etc/logrotate.d/clamav-daemon
+sed -i 's|invoke-rc.d clamav-freshclam reload-log|s6-svc -h /services/freshclam|g' /etc/logrotate.d/clamav-freshclam
 # Folders and permissions
 mkdir -p /var/run/fetchmail
 chmod +x /usr/local/bin/*

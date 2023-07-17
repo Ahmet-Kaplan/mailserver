@@ -2,5 +2,6 @@ docker-compose.yml
 docker-compose.mysql.yml
 docker-compose.pgsql.yml
 traefik.toml
+.testing
 .env
 certs

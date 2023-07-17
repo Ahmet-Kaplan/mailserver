@@ -1,4 +1,4 @@
-FROM ubuntu:22.04 AS base
+FROM debian:12.0-slim AS base
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BUILD_CORES
@@ -9,8 +9,14 @@ ARG S6_VER=2.11.3.2
 ARG RSPAMD_VER=3.5
 ARG GUCCI_VER=1.6.6
 
-LABEL description="s6 + rspamd image based on Ubuntu" \
-      maintainer="Ali Khadivi <khadiviali39@gmail.com>" \
+ARG SKALIBS_SHA256_HASH="b272a1ab799f7fac44b9b4fb5ace78a9616b2fe4882159754b8088c4d8199e33"
+ARG EXECLINE_SHA256_HASH="c8027fa70922d117cdee8cc20d277e38d03fd960e6d136d8cec32603d4ec238d"
+ARG S6_SHA256_HASH="7c16138ad2f0ffbe0ed2ae8dd0cecada9f7c787edd33a69084d219110693df74"
+ARG RSPAMD_SHA256_HASH="2d6bd94942acdd3203cf31ef023eb2356c74d5f0e834b7a0e2017004d4ad5938"
+ARG GUCCI_SHA256_HASH="c1a25f73e91879a744b630d0922899a8ece0ea93567d689727e2184bc888a6db"
+
+LABEL description="s6 + rspamd image based on Debian" \
+      maintainer="Ahmet Kaplan" \
       rspamd_version="Rspamd v$RSPAMD_VER built from source" \
       s6_version="s6 v$S6_VER built from source"
 
@@ -35,7 +41,8 @@ RUN NB_CORES=${BUILD_CORES-$(getconf _NPROCESSORS_CONF)} \
     libsodium-dev \
     libhyperscan-dev \
     libjemalloc-dev \
-    libmagic-dev" \
+    libmagic-dev \
+    libsodium-dev" \
  && apt-get update && apt-get install -y -q --no-install-recommends \
     ${BUILD_DEPS} \
     libevent-2.1-7 \
@@ -47,6 +54,7 @@ RUN NB_CORES=${BUILD_CORES-$(getconf _NPROCESSORS_CONF)} \
     libsqlite3-0 \
     libhyperscan5 \
     libjemalloc2 \
+    libsodium23 \
     sqlite3 \
     openssl \
     ca-certificates \
@@ -107,7 +115,7 @@ RUN NB_CORES=${BUILD_CORES-$(getconf _NPROCESSORS_CONF)} \
 
 FROM base AS final
 LABEL description="Simple and full-featured mail server using Docker" \
-      maintainer="Ali Khadivi <khadiviali39@gmail.com>"
+      maintainer="Ahmet Kaplan"
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
@@ -117,15 +125,16 @@ RUN apt-get update && apt-get install -y -q --no-install-recommends \
     dovecot-core dovecot-imapd dovecot-lmtpd dovecot-pgsql dovecot-mysql dovecot-ldap dovecot-sieve dovecot-managesieved dovecot-pop3d \
     fetchmail libdbi-perl libdbd-pg-perl libdbd-mysql-perl liblockfile-simple-perl \
     clamav clamav-daemon libclamunrar \
-    python3-pip python3-setuptools python3-wheel \
-    rsyslog dnsutils curl unbound jq rsync \
+    python3-pip python3-setuptools python3-wheel python3-gpg python3-watchdog \
+    rsyslog dnsutils curl unbound unbound-anchor jq rsync \
     inotify-tools \
  && rm -rf /var/spool/postfix \
  && ln -s /var/mail/postfix/spool /var/spool/postfix \
  && apt-get autoremove -y \
  && apt-get clean \
  && rm -rf /tmp/* /var/lib/apt/lists/* /var/cache/debconf/*-old \
- && pip3 install watchdog
+ && pip3 install watchdog \
+ && sed -i 's#https://rspamd.com/freemail/disposable.txt.zst#https://maps.rspamd.com/freemail/disposable.txt.zst#' /etc/rspamd/modules.d/multimap.conf
 
 EXPOSE 25 143 465 587 993 4190 11334
 COPY rootfs /
