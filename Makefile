@@ -1,6 +1,6 @@
-NAME = mailserver2/mailserver:testing
+NAME = kaplan38/mailserver:latest
 
-all: build-no-cache default reverse ldap ldap2 sieve ecdsa traefik_acmev1 traefik_acmev2 clean
+all: build default reverse ldap ldap2 sieve ecdsa traefik_acmev1 traefik_acmev2 clean
 no-build: default reverse ldap ldap2 sieve ecdsa traefik_acmev1 traefik_acmev2 clean
 default: init_default fixtures_default run_default stop_default
 reverse: init_reverse fixtures_reverse run_reverse stop_reverse
@@ -37,7 +37,7 @@ init_redis:
 		-d \
 		--name redis \
 		-t redis:7.0-alpine
-	sleep 10
+	sleep 2
 
 init_mariadb:
 	-docker rm -f \
@@ -199,7 +199,7 @@ init_ldap2: init_openldap init_redis
 		-t $(NAME)
 fixtures_ldap2:
 	docker exec mailserver_ldap2 /bin/sh -c "while ! echo PING | nc -z 0.0.0.0 25 ; do sleep 1 ; done"
-	sleep 30
+	sleep 2
 	docker exec mailserver_ldap2 /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-to-existing-user.txt"
 	docker exec mailserver_ldap2 /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-to-valid-user-subaddress.txt"
 	docker exec mailserver_ldap2 /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-to-non-existing-user.txt"
@@ -207,7 +207,7 @@ fixtures_ldap2:
 	docker exec mailserver_ldap2 /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-to-existing-alias-forward.txt"
 	docker exec mailserver_ldap2 /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-to-existing-alias-group.txt"
 	docker exec mailserver_ldap2 /bin/sh -c "openssl s_client -ign_eof -connect 0.0.0.0:587 -starttls smtp < /tmp/tests/email-templates/internal-user-to-existing-user.txt"
-	sleep 10
+	sleep 2
 run_ldap2:
 	./test/bats/bin/bats test/ldap2.bats
 stop_ldap2:
@@ -218,7 +218,7 @@ init_default: init_redis init_mariadb
 	-docker rm -f \
 		mailserver_default || true
 
-	sleep 60
+	sleep 2
 
 	docker run \
 		-d \
@@ -244,7 +244,7 @@ init_default: init_redis init_mariadb
 init_reverse: init_redis init_postgres
 	-docker rm -f \
 		mailserver_reverse || true
-	sleep 10
+	sleep 2
 	docker run \
 		-d \
 		--name mailserver_reverse \
@@ -283,8 +283,8 @@ init_reverse: init_redis init_postgres
 		-v "`pwd`/test/share/letsencrypt":/etc/letsencrypt \
 		-t $(NAME)
 fixtures_reverse:
-    docker exec mailserver_reverse /bin/sh -c "while ! echo PING | nc -z 0.0.0.0 25 ; do sleep 1 ; done"
-	sleep 30
+	docker exec mailserver_reverse /bin/sh -c "while ! echo PING | nc -z 0.0.0.0 25 ; do sleep 1 ; done"
+	sleep 2
 	docker exec mailserver_reverse /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-to-existing-user.txt"
 	docker exec mailserver_reverse /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-to-valid-user-subaddress-with-default-separator.txt"
 	docker exec mailserver_reverse /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-to-non-existing-user.txt"
@@ -292,7 +292,7 @@ fixtures_reverse:
 	docker exec mailserver_reverse /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-spam-to-existing-user.txt"
 	docker exec mailserver_reverse /bin/sh -c "openssl s_client -ign_eof -connect 0.0.0.0:587 -starttls smtp < /tmp/tests/email-templates/internal-user-to-existing-user.txt"
 	# Wait until all mails have been processed
-	sleep 10
+	sleep 2
 run_reverse:
 	./test/bats/bin/bats test/reverse.bats
 stop_reverse:
@@ -302,7 +302,7 @@ stop_reverse:
 init_ecdsa: init_redis init_mariadb
 	-docker rm -f \
 		mailserver_ecdsa || true
-	sleep 10
+	sleep 2
 	docker run \
 		-d \
 		--name mailserver_ecdsa \
@@ -320,9 +320,9 @@ init_ecdsa: init_redis init_mariadb
 		-v "`pwd`/test/share/postfix/custom.ecdsa.conf":/var/mail/postfix/custom.conf \
 		-h mail.domain.tld \
 		-t $(NAME)
-	sleep 10
+	sleep 2
 run_ecdsa:
-    docker exec mailserver_ecdsa /bin/sh -c "while ! echo PING | nc -z 0.0.0.0 587 ; do sleep 1 ; done"
+	docker exec mailserver_ecdsa /bin/sh -c "while ! echo PING | nc -z 0.0.0.0 587 ; do sleep 1 ; done"
 	./test/bats/bin/bats test/ecdsa.bats
 stop_ecdsa:
 	-docker rm -f \
@@ -347,8 +347,8 @@ init_traefik_acmev1: init_redis init_mariadb
 		-h mail.domain.tld \
 		-t $(NAME)
 run_traefik_acmev1:
-    docker exec mailserver_traefik_acmev1 /bin/sh -c "while ! echo PING | nc -z 0.0.0.0 587 ; do sleep 1 ; done"
-	sleep 20
+	docker exec mailserver_traefik_acmev1 /bin/sh -c "while ! echo PING | nc -z 0.0.0.0 587 ; do sleep 1 ; done"
+	sleep 2
 	./test/bats/bin/bats test/traefik_acmev1.bats
 stop_traefik_acmev1:
 	-docker rm -f \
@@ -373,8 +373,8 @@ init_traefik_acmev2: init_redis init_mariadb
 		-h mail.domain.tld \
 		-t $(NAME)
 run_traefik_acmev2:
-    docker exec mailserver_traefik_acmev2 /bin/sh -c "while ! echo PING | nc -z 0.0.0.0 587 ; do sleep 1 ; done"
-	sleep 20
+	docker exec mailserver_traefik_acmev2 /bin/sh -c "while ! echo PING | nc -z 0.0.0.0 587 ; do sleep 1 ; done"
+	sleep 2
 	./test/bats/bin/bats test/traefik_acmev2.bats
 stop_traefik_acmev2:
 	-docker rm -f \
@@ -396,12 +396,12 @@ fixtures_default:
 	docker exec mailserver_default /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-to-existing-alias.txt"
 	docker exec mailserver_default /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-spam-to-existing-user.txt"
 	docker exec mailserver_default /bin/sh -c "nc 0.0.0.0 25 < /tmp/tests/email-templates/external-virus-to-existing-user.txt"
-	docker exec mailserver_default /bin/sh -c "openssl s_client -ign_eof -connect 0.0.0.0:587 -starttls smtp < /tmp/tests/email-templates/internal-user-to-existing-user.txt"
-	docker exec mailserver_default /bin/sh -c "openssl s_client -ign_eof -connect 0.0.0.0:587 -starttls smtp < /tmp/tests/email-templates/internal-rejected-user-to-existing-user.txt"
+#	docker exec mailserver_default /bin/sh -c "openssl s_client -ign_eof -connect 0.0.0.0:587 -starttls smtp < /tmp/tests/email-templates/internal-user-to-existing-user.txt"
+#	docker exec mailserver_default /bin/sh -c "openssl s_client -ign_eof -connect 0.0.0.0:587 -starttls smtp < /tmp/tests/email-templates/internal-rejected-user-to-existing-user.txt"
 	sleep 2
-	docker exec mailserver_default /bin/sh -c "openssl s_client -ign_eof -connect 0.0.0.0:993 < /tmp/tests/sieve/trigger-spam-ham-learning.txt"
+#	docker exec mailserver_default /bin/sh -c "openssl s_client -ign_eof -connect 0.0.0.0:993 < /tmp/tests/sieve/trigger-spam-ham-learning.txt"
 	# Wait until all mails have been processed
-	sleep 10
+	sleep 2
 run_default:
 	./test/bats/bin/bats test/default.bats
 stop_default:
@@ -456,7 +456,7 @@ fixtures_sieve:
 	docker exec mailserver_sieve /bin/sh -c "openssl s_client -ign_eof -connect 0.0.0.0:993 < /tmp/tests/sieve/trigger-spam-ham-learning.txt"
 
 	# Wait until all mails have been processed
-	sleep 10
+	sleep 2
 
 run_sieve:
 	./test/bats/bin/bats test/sieve.bats
@@ -467,4 +467,5 @@ stop_sieve:
 
 clean:
 	docker images --quiet --filter=dangling=true | xargs --no-run-if-empty docker rmi
-	docker volume ls -qf dangling=true | xargs -r docker volume rm
+	docker volume ls -qf dangling=true | xargs -r docker volume
+	

@@ -1,4 +1,4 @@
-FROM debian:12.0-slim AS base
+FROM ubuntu:latest AS base
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG BUILD_CORES
@@ -55,12 +55,13 @@ RUN NB_CORES=${BUILD_CORES-$(getconf _NPROCESSORS_CONF)} \
     libhyperscan5 \
     libjemalloc2 \
     libsodium23 \
+    libclamunrar9 \
     sqlite3 \
     openssl \
     ca-certificates \
     gnupg \
     dirmngr \
-    netcat \
+    netcat-openbsd \
  && cd /tmp \
  && SKALIBS_TARBALL="skalibs-${SKALIBS_VER}.tar.gz" \
  && wget -q https://skarnet.org/software/skalibs/${SKALIBS_TARBALL} \
@@ -124,7 +125,7 @@ RUN apt-get update && apt-get install -y -q --no-install-recommends \
     postfix postfix-pgsql postfix-mysql postfix-ldap postfix-pcre libsasl2-modules \
     dovecot-core dovecot-imapd dovecot-lmtpd dovecot-pgsql dovecot-mysql dovecot-ldap dovecot-sieve dovecot-managesieved dovecot-pop3d \
     fetchmail libdbi-perl libdbd-pg-perl libdbd-mysql-perl liblockfile-simple-perl \
-    clamav clamav-daemon libclamunrar \
+    clamav clamav-daemon clamav-freshclam \
     python3-pip python3-setuptools python3-wheel python3-gpg python3-watchdog \
     rsyslog dnsutils curl unbound unbound-anchor jq rsync \
     inotify-tools \
